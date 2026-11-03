@@ -273,7 +273,7 @@
     let recordsData = [];
     let db = null;
 
-    // 기본 프리셋 (리산테크 실무 라인업)
+    // 기본 자재 프리셋
     const defaultPresets = [
       { name: "LTQ-100", spec: "터널등 모뎀 (100W 2CH)", unit: "EA" },
       { name: "LTQ-200", spec: "터널등 모뎀 (200W)", unit: "EA" },
@@ -514,7 +514,7 @@
       }).join('');
     }
 
-    // 7. DB 저장 및 삭제 (빈 행 자동 필터링)
+    // 7. DB 저장 및 삭제
     async function saveRecord(e) {
       e.preventDefault();
       if (!db) {
@@ -535,7 +535,6 @@
         const spec = row.querySelector('.mat-spec').value.trim();
         const qty = parseFloat(row.querySelector('.mat-qty').value) || 0;
         const unit = row.querySelector('.mat-unit').value.trim() || 'EA';
-        // 품목명이 입력되어 있고 수량이 0보다 큰 것만 골라서 저장 (빈 칸은 자동 무시)
         if (name && qty > 0) {
           materials.push({ name, spec, qty, unit });
         }
@@ -570,7 +569,7 @@
       }
     }
 
-    // 8. 모달 제어 및 프리셋 자동 덮어쓰기 로직
+    // 8. 모달 제어 및 프리셋
     function openModal(defaultDate = null) {
       document.getElementById('recordForm').reset();
       document.getElementById('editRecordId').value = '';
@@ -581,7 +580,7 @@
       document.getElementById('recordDate').value = targetDate;
 
       renderQuickPresets();
-      addMaterialRow(); // 초기 1개 행 생성
+      addMaterialRow();
       document.getElementById('recordModal').classList.remove('hidden');
     }
 
@@ -644,7 +643,6 @@
       `).join('');
     }
 
-    // 프리셋 클릭 처리 함수
     function applyPreset(name, spec, unit) {
       const rows = document.querySelectorAll('.mat-row');
       
@@ -659,7 +657,7 @@
         }
       }
 
-      // 2. 비어있는 직접입력 칸이 남아있다면 새 행을 만들지 않고 그 빈 칸을 프리셋으로 덮어씀
+      // 2. 비어있는 직접입력 칸이 남아있다면 덮어쓰기
       for (let r of rows) {
         const rowName = r.querySelector('.mat-name').value.trim();
         if (!rowName) {
@@ -671,7 +669,7 @@
         }
       }
 
-      // 3. 빈 칸이 전혀 없을 때만 새 행 추가
+      // 3. 빈 칸이 없을 때만 새 행 추가
       addMaterialRow(name, spec, 1, unit);
     }
 
@@ -751,55 +749,56 @@
         const monthly = recordsData.filter(r => (r.date || '').startsWith(`${year}-${month}`));
         const map = {};
         monthly.forEach(r => {
-          const k = `${m.name}___${m.spec}___${m.unit}`;
-          if (!map[k]) map[k] = { name: m.name, spec: m.spec, unit: m.unit, qty: 0, sites: new Set(), count: 0 };
-          map[k].qty += Number(m.qty || 0);
-          map[k].sites.add(r.location);
-          map[k].count += 1;
+          (r.materials || []).forEach(m => {
+            const k = `${m.name}___${m.spec}___${m.unit}`;
+            if (!map[k]) map[k] = { name: m.name, spec: m.spec, unit: m.unit, qty: 0, sites: new Set(), count: 0 };
+            map[k].qty += Number(m.qty || 0);
+            map[k].sites.add(r.location);
+            map[k].count += 1;
+          });
         });
-      });
-      const list = Object.values(map).sort((a, b) => b.qty - a.qty);
-      list.forEach((item, idx) => {
-        csv += `${idx + 1},"${item.name}","${item.spec}",${item.qty},"${item.unit}",${item.count},"${Array.from(item.sites).join('; ')}"\n`;
-      });
+        const list = Object.values(map).sort((a, b) => b.qty - a.qty);
+        list.forEach((item, idx) => {
+          csv += `${idx + 1},"${item.name}","${item.spec}",${item.qty},"${item.unit}",${item.count},"${Array.from(item.sites).join('; ')}"\n`;
+        });
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `리산테크_자재_${type === 'detail' ? '일자별내역' : '월간총사용량'}_${year}${month}.csv`;
+      link.click();
     }
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `리산테크_자재_${type === 'detail' ? '일자별내역' : '월간총사용량'}_${year}${month}.csv`;
-    link.click();
-  }
+    function switchTab(tab) {
+      ['cal', 'list', 'summary'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).className = "py-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium flex items-center gap-1.5";
+      });
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).className = "py-2.5 px-2 border-b-2 border-blue-500 text-white font-bold flex items-center gap-1.5";
+    }
 
-  function switchTab(tab) {
-    ['cal', 'list', 'summary'].forEach(t => {
-      document.getElementById(`view-${t}`).classList.add('hidden');
-      document.getElementById(`tab-${t}`).className = "py-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium flex items-center gap-1.5";
-    });
-    document.getElementById(`view-${tab}`).classList.remove('hidden');
-    document.getElementById(`tab-${tab}`).className = "py-2.5 px-2 border-b-2 border-blue-500 text-white font-bold flex items-center gap-1.5";
-  }
+    function changeMonth(delta) {
+      currentDate.setMonth(currentDate.getMonth() + delta);
+      renderCalendar();
+      renderDetailList();
+      renderSummaryTable();
+    }
 
-  function changeMonth(delta) {
-    currentDate.setMonth(currentDate.getMonth() + delta);
-    renderCalendar();
-    renderDetailList();
-    renderSummaryTable();
-  }
+    function goToday() {
+      currentDate = new Date();
+      renderCalendar();
+      renderDetailList();
+      renderSummaryTable();
+    }
 
-  function goToday() {
-    currentDate = new Date();
-    renderCalendar();
-    renderDetailList();
-    renderSummaryTable();
-  }
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
 
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  window.addEventListener('DOMContentLoaded', init);
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
